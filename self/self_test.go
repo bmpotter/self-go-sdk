@@ -1,24 +1,54 @@
 package self
 
 import (
-  "testing"
-  "time"
+	"testing"
+	"time"
+
+	"github.com/satori/go.uuid"
 )
 
+var targets = []Target{TargetBlackboard, TargetAgentSociety, TargetBlackboardStream, TargetGestureManager, TargetSensorManager}
+
 func TestConn(t *testing.T) {
-  conn, err := Init("localhost")
-  if err != nil {
-    t.Fail()
+	conn, err := Init("localhost")
+	if err != nil {
+		t.Fail()
+	}
+
+	conn.Sub(targets)
+	time.Sleep(1 * time.Second)
+	conn.Unsub(targets)
+}
+
+func TestPub(t *testing.T) {
+	conn, err := Init("localhost")
+	if err != nil {
+		t.Fail()
+	}
+	message := msgData{
+		Event: "dummy",
+		Thing: Thing{
+			GUID:       uuid.NewV4().String(),
+			Type:       "fooType",
+			CreateTime: float64(time.Now().Unix()),
+			Text:       "foo bar text",
+		},
+	}
+	conn.Pub(TargetBlackboard, message)
+}
+
+func TestReg(t *testing.T) {
+	conn, err := Init("localhost")
+	if err != nil {
+		t.Fail()
+	}
+	conn.Sub(targets)
+  handleFunc := func(thing Thing){
+    logger.Println(thing.Info, thing.Text, thing.Type, thing.State)
   }
-  conn.Sub(TargetBlackboard)
-  conn.Sub(TargetAgentSociety)
-  conn.Sub(TargetBlackboardStream)
-  conn.Sub(TargetGestureManager)
-  conn.Sub(TargetSensorManager)
-  time.Sleep(100 * time.Second)
-  conn.Unsub(TargetBlackboard)
-  conn.Unsub(TargetAgentSociety)
-  conn.Unsub(TargetBlackboardStream)
-  conn.Unsub(TargetGestureManager)
-  conn.Unsub(TargetSensorManager)
+
+	conn.Reg("demo1", handleFunc)
+	time.Sleep(30 * time.Second)
+	conn.Unreg("demo1")
+	conn.Unsub(targets)
 }

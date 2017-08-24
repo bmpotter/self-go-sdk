@@ -2,18 +2,20 @@ package self
 
 import (
 	"encoding/json"
-	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"sync"
+
+	"github.com/gorilla/websocket"
 )
 
 var logger = log.New(os.Stdout, "self: ", log.Lshortfile)
 
 type msg struct {
 	Binary    bool     `json:"binary"`
-	Data      string   `json:"data"`
+	Data      string   `json:"data"` // json msgData
 	Msg       string   `json:"msg"`
 	Origin    string   `json:"origin"`
 	Persisted bool     `json:"persisted"`
@@ -35,14 +37,13 @@ type Thing struct {
 	Type           string  `json:"Type_"`
 	Children       []Thing `json:"m_Children"`
 	Confidence     float64 `json:"m_Confidence"`
-	CreateType     float64 `json:"m_CreateTime"`
+	CreateTime     float64 `json:"m_CreateTime"`
 	Info           string  `json:"m_Info"`
 	Name           string  `json:"m_Name"`
 	ProxyID        string  `json:"m_ProxyID"`
 	State          string  `json:"m_State"`
 	Threshold      float64 `json:"m_Threshold"`
 	ClassifyIntent bool    `json:"m_ClassifyIntent"`
-	CreateTime     float64 `json:"m_CreateTime"`
 	Language       string  `json:"m_Language"`
 	LocalDialog    bool    `json:"m_LocalDialog"`
 	Text           string  `json:"m_Text"`
@@ -66,16 +67,18 @@ const (
 
 // Conn is a ws conn + metadata
 type Conn struct {
-	conn   *websocket.Conn
-	selfID string
+	mutex    *sync.Mutex
+	handlers map[string]MsgHandlerFunc
+	conn     *websocket.Conn
+	selfID   string
 }
 
 // Sub subscribes to a topic
-func (conn *Conn) Sub(target Target) {
+func (conn *Conn) Sub(targets []Target) {
 	subTopic := msg{
-		Targets: []Target{target},
+		Targets: targets,
 		Msg:     "subscribe",
-		Origin:  conn.selfID,
+		Origin:  "/.",
 	}
 	msg, err := json.Marshal(subTopic)
 	if err != nil {
@@ -86,13 +89,12 @@ func (conn *Conn) Sub(target Target) {
 	}
 }
 
-
 // Unsub unsubscribes from a topic
-func (conn *Conn) Unsub(target Target) {
+func (conn *Conn) Unsub(targets []Target) {
 	subTopic := msg{
-		Targets: []Target{target},
+		Targets: targets,
 		Msg:     "unsubscribe",
-		Origin:  conn.selfID,
+		Origin:  "/.",
 	}
 	msg, err := json.Marshal(subTopic)
 	if err != nil {
@@ -104,19 +106,48 @@ func (conn *Conn) Unsub(target Target) {
 }
 
 // Pub publishes a message to a topic
-func (conn *Conn) Pub(target Target, Msg string) {
-	subTopic := msg{
-		Targets: []Target{target},
-		Msg:     Msg,
-		Origin:  conn.selfID,
-	}
-	msg, err := json.Marshal(subTopic)
+func (conn *Conn) Pub(target Target, data msgData) {
+	dataBytes, err := json.Marshal(data)
 	if err != nil {
 		panic(err)
 	}
-	if err = conn.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+	message := msg{
+		Targets: []Target{target},
+		Data:    string(dataBytes),
+		Origin:  conn.selfID,
+		Msg:     "publish",
+	}
+	msgBytes, err := json.Marshal(message)
+	if err != nil {
+		panic(err)
+	}
+	if err = conn.conn.WriteMessage(websocket.TextMessage, msgBytes); err != nil {
 		logger.Println(err)
 	}
+}
+
+// MsgHandlerFunc handels an incoming Thing
+type MsgHandlerFunc func(Thing)
+
+// PrintMsgHandler just prints the thing
+func PrintMsgHandler(thing Thing) {
+	logger.Println(thing)
+}
+
+// Reg registers a function to the connection
+func (conn *Conn) Reg(name string, handlerFunc MsgHandlerFunc) {
+	conn.mutex.Lock()
+	defer conn.mutex.Unlock()
+	conn.handlers[name] = handlerFunc
+	return
+}
+
+// Unreg removes a handler from the connection
+func (conn *Conn) Unreg(name string) {
+	conn.mutex.Lock()
+	defer conn.mutex.Unlock()
+	delete(conn.handlers, name)
+	return
 }
 
 // Init the connection
@@ -127,8 +158,10 @@ func Init(host string) (conn *Conn, err error) {
 		return
 	}
 	conn = &Conn{
-		conn:   c,
-		selfID: "/.",
+		conn:     c,
+		selfID:   "/.",
+		handlers: make(map[string]MsgHandlerFunc),
+		mutex:    &sync.Mutex{},
 	}
 	go func() {
 		for {
@@ -140,13 +173,17 @@ func Init(host string) (conn *Conn, err error) {
 				if err := json.Unmarshal(msgBytes, &message); err != nil {
 					logger.Println(err)
 				} else {
-					//logger.Println(message.Topic)
+					logger.Println(message.Msg)
 					var messageData msgData
 					if err := json.Unmarshal([]byte(message.Data), &messageData); err != nil {
 						logger.Println(err)
 						logger.Println(message.Data)
 					} else {
-						logger.Println(messageData.Thing.Text)
+						conn.mutex.Lock()
+						for _, handle := range conn.handlers {
+							go handle(messageData.Thing)
+						}
+						conn.mutex.Unlock()
 					}
 				}
 			}
