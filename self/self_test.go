@@ -7,12 +7,13 @@ import (
 	"github.com/satori/go.uuid"
 )
 
-var targets = []Target{TargetBlackboard, TargetAgentSociety, TargetBlackboardStream, TargetGestureManager, TargetSensorManager}
+var targets = []Target{TargetAgentSociety, TargetBlackboardStream, TargetGestureManager, TargetSensorManager, TargetBlackboard}
 
 func TestConn(t *testing.T) {
 	conn, err := Init("localhost")
 	if err != nil {
 		t.Fail()
+		logger.Fatalln(err)
 	}
 
 	conn.Sub(targets)
@@ -43,12 +44,23 @@ func TestReg(t *testing.T) {
 		t.Fail()
 	}
 	conn.Sub(targets)
-  handleFunc := func(thing Thing){
-    logger.Println(thing.Info, thing.Text, thing.Type, thing.State)
-  }
-
-	conn.Reg("demo1", handleFunc)
-	time.Sleep(30 * time.Second)
-	conn.Unreg("demo1")
+	conn.Reg("misc_types", MakeFilteredHandler(
+		Not(
+			Or(
+				[]ThingFilter{
+					MakeThingTypeFilter("Health"),
+          MakeThingTypeFilter("IThing"),
+          MakeThingTypeFilter("Proxy"),
+          MakeThingTypeFilter("Failure"),
+					MakeThingTypeFilter("RequestIntent"),
+				},
+			),
+		),
+		PrintThingType,
+	))
+	conn.Reg("func2", MakeFilteredHandler(MakeThingTypeFilter("Text"), PrintThingText))
+	time.Sleep(90 * time.Second)
+	conn.Unreg("misc_types")
+	conn.Unreg("func2")
 	conn.Unsub(targets)
 }

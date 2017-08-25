@@ -1,3 +1,5 @@
+// Package self lets you connect to a self instance via the WS API.
+// To run a self instance, see https://github.com/watson-intu/self, or https://github.com/michaeldye/self-docker-builder
 package self
 
 import (
@@ -68,7 +70,7 @@ const (
 // Conn is a ws conn + metadata
 type Conn struct {
 	mutex    *sync.Mutex
-	handlers map[string]MsgHandlerFunc
+	handlers map[string]ThingHandlerFunc
 	conn     *websocket.Conn
 	selfID   string
 }
@@ -126,16 +128,8 @@ func (conn *Conn) Pub(target Target, data msgData) {
 	}
 }
 
-// MsgHandlerFunc handels an incoming Thing
-type MsgHandlerFunc func(Thing)
-
-// PrintMsgHandler just prints the thing
-func PrintMsgHandler(thing Thing) {
-	logger.Println(thing)
-}
-
 // Reg registers a function to the connection
-func (conn *Conn) Reg(name string, handlerFunc MsgHandlerFunc) {
+func (conn *Conn) Reg(name string, handlerFunc ThingHandlerFunc) {
 	conn.mutex.Lock()
 	defer conn.mutex.Unlock()
 	conn.handlers[name] = handlerFunc
@@ -160,7 +154,7 @@ func Init(host string) (conn *Conn, err error) {
 	conn = &Conn{
 		conn:     c,
 		selfID:   "/.",
-		handlers: make(map[string]MsgHandlerFunc),
+		handlers: make(map[string]ThingHandlerFunc),
 		mutex:    &sync.Mutex{},
 	}
 	go func() {
@@ -173,11 +167,8 @@ func Init(host string) (conn *Conn, err error) {
 				if err := json.Unmarshal(msgBytes, &message); err != nil {
 					logger.Println(err)
 				} else {
-					logger.Println(message.Msg)
 					var messageData msgData
 					if err := json.Unmarshal([]byte(message.Data), &messageData); err != nil {
-						logger.Println(err)
-						logger.Println(message.Data)
 					} else {
 						conn.mutex.Lock()
 						for _, handle := range conn.handlers {
