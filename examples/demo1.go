@@ -15,25 +15,23 @@ func main() {
 	targets := []self.Target{self.TargetBlackboardStream, self.TargetAgentSociety}
 	conn.Sub(targets)
 	conn.Reg("misc_types", self.MakeFilteredHandler(
+		//self.And(
+		//[]self.ThingFilter{
+		//self.MakeThingTypeFilter("IThing"),
 		self.Not(
-			self.Or(
-				[]self.ThingFilter{
-					self.MakeThingTypeFilter("Health"),
-					self.MakeThingTypeFilter("IThing"),
-					self.MakeThingTypeFilter("Proxy"),
-					self.MakeThingTypeFilter("Failure"),
-					self.MakeThingTypeFilter("RequestIntent"),
-					self.MakeThingTypeFilter("Image"),
-				},
-			),
+			self.MakeThingTypeFilter("Image"),
 		),
-		self.PrintThingType,
+		//},
+		//),
+		func(thing self.Thing) {
+			fmt.Println("thing:", thing.Type)
+		},
 	))
-	handleFunc := func(thing self.Thing) {
-		fmt.Println(thing.Name, thing.Type, thing.Text)
-	}
-	conn.Reg("handle func 1", handleFunc)
-	conn.Reg("print_text", self.MakeFilteredHandler(self.MakeThingTypeFilter("Text"), self.PrintThingText))
+	//handleFunc := func(thing self.Thing) {
+	//	fmt.Println("thing:", thing.Type)
+	//}
+	//conn.Reg("handle func 1", handleFunc)
+	//conn.Reg("print_text", self.MakeFilteredHandler(self.MakeThingTypeFilter("Text"), self.PrintThingText))
 	time.Sleep(20 * time.Second)
 	conn.Unreg("handle func 1")
 	conn.Unreg("print_text")
