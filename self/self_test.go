@@ -38,6 +38,10 @@ func TestPub(t *testing.T) {
 	conn.Pub(TargetBlackboard, message)
 }
 
+func HandleImage(thing Thing){
+	logger.Println(thing)
+}
+
 func TestReg(t *testing.T) {
 	conn, err := Init("localhost")
 	if err != nil {
@@ -58,9 +62,10 @@ func TestReg(t *testing.T) {
 		),
 		PrintThingType,
 	))
-	conn.Reg("func2", MakeFilteredHandler(MakeThingTypeFilter("Text"), PrintThingText))
-	time.Sleep(90 * time.Second)
 	conn.Unreg("misc_types")
+	conn.Reg("func2", MakeFilteredHandler(MakeThingTypeFilter("Text"), PrintThingText))
 	conn.Unreg("func2")
+	conn.Reg("image type", MakeFilteredHandler(MakeThingTypeFilter("Image"), HandleImage))
+	time.Sleep(90 * time.Second)
 	conn.Unsub(targets)
 }

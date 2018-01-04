@@ -29,29 +29,30 @@ type msg struct {
 
 type msgData struct {
 	Event  string `json:"event"`
+	Type   string `json:"type"`
 	Parent string `json:"parent"`
 	Thing  Thing  `json:"thing"`
 }
 
 // Thing is a thing
 type Thing struct {
-	GUID           string  `json:"GUID_"`
-	Type           string  `json:"Type_"`
-	Children       []Thing `json:"m_Children"`
-	Confidence     float64 `json:"m_Confidence"`
-	CreateTime     float64 `json:"m_CreateTime"`
-	Info           string  `json:"m_Info"`
-	Name           string  `json:"m_Name"`
-	ProxyID        string  `json:"m_ProxyID"`
-	State          string  `json:"m_State"`
-	Threshold      float64 `json:"m_Threshold"`
-	ClassifyIntent bool    `json:"m_ClassifyIntent"`
-	Language       string  `json:"m_Language"`
-	LocalDialog    bool    `json:"m_LocalDialog"`
-	Text           string  `json:"m_Text"`
-	ECategory      int     `json:"m_eCategory"`
-	FImportance    int     `json:"m_fImportance"`
-	FLifeSpan      int     `json:"m_fLifeSpan"`
+	GUID           string        `json:"GUID_"`
+	Type           string        `json:"Type_"`
+	Children       []Thing       `json:"m_Children"`
+	Confidence     float64       `json:"m_Confidence"`
+	CreateTime     float64       `json:"m_CreateTime"`
+	Info           string        `json:"m_Info"`
+	Name           string        `json:"m_Name"`
+	ProxyID        string        `json:"m_ProxyID"`
+	State          string        `json:"m_State"`
+	Threshold      float64       `json:"m_Threshold"`
+	ClassifyIntent bool          `json:"m_ClassifyIntent"`
+	Language       string        `json:"m_Language"`
+	LocalDialog    bool          `json:"m_LocalDialog"`
+	Text           string        `json:"m_Text"`
+	ECategory      ThingCategory `json:"m_eCategory"`
+	FImportance    int           `json:"m_fImportance"`
+	FLifeSpan      int           `json:"m_fLifeSpan"`
 }
 
 // Target is a target that can be subscribed to
@@ -65,6 +66,32 @@ const (
 	TargetGestureManager   Target = "gesture-manager"
 	TargetSensorManager    Target = "sensor-manager"
 	TargetModels           Target = "sensors"
+	TargetConfig           Target = "config"
+	Dot                    Target = "."
+)
+
+// ThingCategory are Intu supports different types of things.
+// Things belonging to different types are not attached to each other directly but rather a proxy is created and connected via GUID
+type ThingCategory int
+
+// Categorys of things
+const (
+	ThingCategoryINVALID    ThingCategory = -1
+	ThingCategoryPERCEPTION ThingCategory = 0
+	ThingCategoryAGENCY     ThingCategory = 1
+	ThingCategoryMODEL      ThingCategory = 2
+)
+
+// ThingEventType Represents different types of an event related to things such as whether a thing has been added, removed, or changed
+type ThingEventType int
+
+// Type of thing events
+const (
+	ThingEventTypeNONE       ThingEventType = 0
+	ThingEventTypeADDED      ThingEventType = 1
+	ThingEventTypeREMOVED    ThingEventType = 2
+	ThingEventTypeSTATE      ThingEventType = 4
+	ThingEventTypeIMPORTANCE ThingEventType = 8
 )
 
 // Conn is a ws conn + metadata
@@ -80,7 +107,8 @@ func (conn *Conn) Sub(targets []Target) {
 	subTopic := msg{
 		Targets: targets,
 		Msg:     "subscribe",
-		Origin:  "/.",
+		Origin:  "../.",
+		Topic:   "config",
 	}
 	msg, err := json.Marshal(subTopic)
 	if err != nil {
@@ -96,7 +124,7 @@ func (conn *Conn) Unsub(targets []Target) {
 	subTopic := msg{
 		Targets: targets,
 		Msg:     "unsubscribe",
-		Origin:  "/.",
+		Origin:  "../.",
 	}
 	msg, err := json.Marshal(subTopic)
 	if err != nil {
@@ -107,22 +135,37 @@ func (conn *Conn) Unsub(targets []Target) {
 	}
 }
 
+// Close the conn
+func (conn *Conn) Close() {
+	conn.conn.Close()
+}
+
 // Pub publishes a message to a topic
-func (conn *Conn) Pub(target Target, data msgData) {
-	dataBytes, err := json.Marshal(data)
+func (conn *Conn) Pub(target Target, thing Thing) {
+	messageData := msgData{
+		Type:  "IThing",
+		Event: "publish",
+		Thing: thing,
+	}
+
+	dataBytes, err := json.Marshal(messageData)
 	if err != nil {
 		panic(err)
 	}
 	message := msg{
-		Targets: []Target{target},
-		Data:    string(dataBytes),
-		Origin:  conn.selfID,
-		Msg:     "publish",
+		Topic: "blackboard",
+		//Targets:   []Target{"foobar"},
+		Data:      string(dataBytes),
+		Origin:    "../.",
+		Msg:       "publish",
+		Binary:    false,
+		Persisted: true,
 	}
 	msgBytes, err := json.Marshal(message)
 	if err != nil {
 		panic(err)
 	}
+	logger.Println(string(msgBytes))
 	if err = conn.conn.WriteMessage(websocket.TextMessage, msgBytes); err != nil {
 		logger.Println(err)
 	}
@@ -145,21 +188,22 @@ func (conn *Conn) Unreg(name string) {
 }
 
 // Init the connection
-func Init(host string) (conn *Conn, err error) {
+func Init(host string, selfID string) (conn *Conn, err error) {
 	u := url.URL{Scheme: "ws", Host: host + ":9443", Path: "/stream"}
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), http.Header{"selfId": []string{""}, "orgId": []string{}, "token": []string{""}})
+	c, _, err := websocket.DefaultDialer.Dial(u.String(), http.Header{"selfId": []string{selfID}, "orgId": []string{}, "token": []string{""}})
 	if err != nil {
 		return
 	}
 	conn = &Conn{
 		conn:     c,
-		selfID:   "/.",
+		selfID:   selfID,
 		handlers: make(map[string]ThingHandlerFunc),
 		mutex:    &sync.Mutex{},
 	}
 	go func() {
 		for {
 			_, msgBytes, err := c.ReadMessage()
+			logger.Println("got msg")
 			if err != nil {
 				logger.Println(err)
 			} else {
@@ -167,6 +211,8 @@ func Init(host string) (conn *Conn, err error) {
 				if err := json.Unmarshal(msgBytes, &message); err != nil {
 					logger.Println(err)
 				} else {
+					logger.Println("Origin:", message.Origin, "Topic:", message.Topic)
+					logger.Println(string(msgBytes))
 					var messageData msgData
 					if err := json.Unmarshal([]byte(message.Data), &messageData); err != nil {
 					} else {

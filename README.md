@@ -40,7 +40,7 @@ conn.Unreg("handle func 1")
 
 handleFunc will be called for all things received. This is often undesirable.
 
-`MakeFilteredHandler()` constructs a ThingHandlerFunc which only calls the main handle func if filter func returns true.
+`MakeFilteredHandler()` constructs a ThingHandlerFunc which only calls the main handler func if filterFunc returns true.
 
 ``` golang
 filterFunc := func(thing self.Thing) bool {
