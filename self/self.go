@@ -113,7 +113,8 @@ func (conn *Conn) Sub(targets []Target) {
 	}
 	msg, err := json.Marshal(subTopic)
 	if err != nil {
-		panic(err)
+		logger.Println(err)
+		return
 	}
 	if err = conn.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
 		logger.Println(err)
@@ -142,7 +143,7 @@ func (conn *Conn) Close() {
 }
 
 // Pub publishes a message to a topic
-func (conn *Conn) Pub(target Target, thing Thing) {
+func (conn *Conn) Pub(target Target, thing Thing) (err error) {
 	messageData := msgData{
 		Type:  "IThing",
 		Event: "add_object",
@@ -151,7 +152,7 @@ func (conn *Conn) Pub(target Target, thing Thing) {
 
 	dataBytes, err := json.Marshal(messageData)
 	if err != nil {
-		panic(err)
+		return
 	}
 	message := msg{
 		Topic:     "blackboard",
@@ -165,11 +166,12 @@ func (conn *Conn) Pub(target Target, thing Thing) {
 	}
 	msgBytes, err := json.Marshal(message)
 	if err != nil {
-		panic(err)
+		return
 	}
 	if err = conn.conn.WriteMessage(websocket.TextMessage, msgBytes); err != nil {
-		logger.Println(err)
+		return
 	}
+	return
 }
 
 // Reg registers a function to the connection

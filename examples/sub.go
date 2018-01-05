@@ -20,7 +20,7 @@ func main() {
 			fmt.Println("type:", thing.Type, "name:", thing.Name, "text:", thing.Text, "conf:", thing.Confidence, "data:", thing.Data, "dataType:", thing.DataType)
 		},
 	))
-	time.Sleep(200 * time.Second)
+	time.Sleep(2000 * time.Minute)
 	conn.Unreg("handle func 1")
 	conn.Unreg("print_text")
 	conn.Unsub(targets)
