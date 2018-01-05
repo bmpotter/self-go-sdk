@@ -36,23 +36,25 @@ type msgData struct {
 
 // Thing is a thing
 type Thing struct {
-	GUID           string        `json:"GUID_"`
-	Type           string        `json:"Type_"`
-	Children       []Thing       `json:"m_Children"`
-	Confidence     float64       `json:"m_Confidence"`
-	CreateTime     float64       `json:"m_CreateTime"`
-	Info           string        `json:"m_Info"`
-	Name           string        `json:"m_Name"`
-	ProxyID        string        `json:"m_ProxyID"`
-	State          string        `json:"m_State"`
-	Threshold      float64       `json:"m_Threshold"`
-	ClassifyIntent bool          `json:"m_ClassifyIntent"`
-	Language       string        `json:"m_Language"`
-	LocalDialog    bool          `json:"m_LocalDialog"`
-	Text           string        `json:"m_Text"`
-	ECategory      ThingCategory `json:"m_eCategory"`
-	FImportance    int           `json:"m_fImportance"`
-	FLifeSpan      int           `json:"m_fLifeSpan"`
+	GUID           string            `json:"GUID_"`
+	Type           string            `json:"Type_"`
+	DataType       string            `json:"m_DataType"`
+	Children       []Thing           `json:"m_Children"`
+	Confidence     float64           `json:"m_Confidence"`
+	CreateTime     float64           `json:"m_CreateTime"`
+	Info           string            `json:"m_Info"`
+	Name           string            `json:"m_Name"`
+	ProxyID        string            `json:"m_ProxyID"`
+	State          string            `json:"m_State"`
+	Threshold      float64           `json:"m_Threshold"`
+	ClassifyIntent bool              `json:"m_ClassifyIntent"`
+	Language       string            `json:"m_Language"`
+	LocalDialog    bool              `json:"m_LocalDialog"`
+	Text           string            `json:"m_Text"`
+	ECategory      ThingCategory     `json:"m_eCategory"`
+	FImportance    int               `json:"m_fImportance"`
+	FLifeSpan      int               `json:"m_fLifeSpan"`
+	Data           map[string]string `json:"m_Data"`
 }
 
 // Target is a target that can be subscribed to
@@ -67,7 +69,7 @@ const (
 	TargetSensorManager    Target = "sensor-manager"
 	TargetModels           Target = "sensors"
 	TargetConfig           Target = "config"
-	Dot                    Target = "."
+	TargetDot              Target = "."
 )
 
 // ThingCategory are Intu supports different types of things.
@@ -107,8 +109,7 @@ func (conn *Conn) Sub(targets []Target) {
 	subTopic := msg{
 		Targets: targets,
 		Msg:     "subscribe",
-		Origin:  "../.",
-		Topic:   "config",
+		Origin:  "/.",
 	}
 	msg, err := json.Marshal(subTopic)
 	if err != nil {
@@ -124,7 +125,7 @@ func (conn *Conn) Unsub(targets []Target) {
 	subTopic := msg{
 		Targets: targets,
 		Msg:     "unsubscribe",
-		Origin:  "../.",
+		Origin:  "/.",
 	}
 	msg, err := json.Marshal(subTopic)
 	if err != nil {
@@ -144,7 +145,7 @@ func (conn *Conn) Close() {
 func (conn *Conn) Pub(target Target, thing Thing) {
 	messageData := msgData{
 		Type:  "IThing",
-		Event: "publish",
+		Event: "add_object",
 		Thing: thing,
 	}
 
@@ -153,19 +154,19 @@ func (conn *Conn) Pub(target Target, thing Thing) {
 		panic(err)
 	}
 	message := msg{
-		Topic: "blackboard",
-		//Targets:   []Target{"foobar"},
+		Topic:     "blackboard",
+		Targets:   []Target{target},
 		Data:      string(dataBytes),
-		Origin:    "../.",
-		Msg:       "publish",
+		Origin:    conn.selfID,
+		Msg:       "publish_at",
 		Binary:    false,
 		Persisted: true,
+		//Type:      "IThing",
 	}
 	msgBytes, err := json.Marshal(message)
 	if err != nil {
 		panic(err)
 	}
-	logger.Println(string(msgBytes))
 	if err = conn.conn.WriteMessage(websocket.TextMessage, msgBytes); err != nil {
 		logger.Println(err)
 	}
@@ -203,7 +204,6 @@ func Init(host string, selfID string) (conn *Conn, err error) {
 	go func() {
 		for {
 			_, msgBytes, err := c.ReadMessage()
-			logger.Println("got msg")
 			if err != nil {
 				logger.Println(err)
 			} else {
@@ -211,8 +211,7 @@ func Init(host string, selfID string) (conn *Conn, err error) {
 				if err := json.Unmarshal(msgBytes, &message); err != nil {
 					logger.Println(err)
 				} else {
-					logger.Println("Origin:", message.Origin, "Topic:", message.Topic)
-					logger.Println(string(msgBytes))
+					//logger.Println("Origin:", message.Origin, "Topic:", message.Topic)
 					var messageData msgData
 					if err := json.Unmarshal([]byte(message.Data), &messageData); err != nil {
 					} else {

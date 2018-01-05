@@ -8,18 +8,20 @@ import (
 )
 
 func main() {
-	conn, err := self.Init("localhost", "SubAgent")
+	conn, err := self.Init("localhost", "")
 	if err != nil {
 		panic(err)
 	}
-	targets := []self.Target{self.TargetBlackboard, self.TargetAgentSociety, self.TargetBlackboardStream, self.TargetSensorManager}
+	targets := []self.Target{self.TargetBlackboardStream, self.TargetAgentSociety}
 	conn.Sub(targets)
-	conn.Reg("emotion",
+	conn.Reg("misc_types", self.MakeFilteredHandler(
+		self.MakeThingTypeFilter("IThing"),
 		func(thing self.Thing) {
-			fmt.Println("type:", thing.Type, "name:", thing.Name)
+			fmt.Println("type:", thing.Type, "name:", thing.Name, "text:", thing.Text, "conf:", thing.Confidence, "data:", thing.Data, "dataType:", thing.DataType)
 		},
-	)
-	fmt.Println("subbed")
-	time.Sleep(90 * time.Second)
+	))
+	time.Sleep(200 * time.Second)
+	conn.Unreg("handle func 1")
+	conn.Unreg("print_text")
 	conn.Unsub(targets)
 }
